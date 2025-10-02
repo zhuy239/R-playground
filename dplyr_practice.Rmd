@@ -1,0 +1,363 @@
+---
+title: "dplyr package"
+author: "Ying Zhu"
+date: "2025-09-23"
+output: html_document
+---
+
+This is a record of practicing dplyr. dplyr is a grammar of data manipulation.
+```{r}
+#install.packages("nycflights13")
+library(nycflights13)
+library(tidyverse)
+
+flights
+#glimpse(flights)
+```
+```{r}
+flights |>
+  filter(dest == "IAH") |>
+  group_by(year, month, day) |>
+  summarize(
+    arr_delay = mean(arr_delay, na.rm = TRUE)
+  )
+```
+
+```{r}
+flights |>
+  filter(dep_delay > 120)
+
+flights |>
+  filter(month == 1 & day == 1) # "," is the same as &
+
+flights |>
+  filter(month == 1 | month == 2)
+
+# There’s a useful shortcut when you’re combining | and ==: %in%. It keeps rows where the variable equals one of the values on the right:
+flights |>
+  filter(month %in% c(1,2))
+
+### note: When you run filter() dplyr executes the filtering operation, creating a new data frame, and then prints it. It doesn’t modify the existing flights dataset because dplyr functions never modify their inputs.To save the result, you need to use the assignment operator, <-:
+jan1 <- flights |> 
+  filter(month == 1 & day == 1)
+```
+
+```{r}
+flights |> 
+  arrange(year, month, day, dep_time) # by default, small to big
+
+flights |> 
+  arrange(desc(dep_delay))
+```
+
+```{r}
+flights |>
+  distinct() # remove duplicate rows. find the first occurrence and discard the rest.
+
+flights |> 
+  distinct(origin, dest)
+
+flights |>
+  distinct(origin, dest, .keep_all = TRUE) #  if you want to keep the other columns when filtering for unique rows, you can use the .keep_all = TRUE option.
+
+flights |>
+  count(origin, dest, sort = TRUE)
+```
+# Exercise
+1. In a single pipeline for each condition, find all flights that meet the condition:
+
+  Had an arrival delay of two or more hours
+  Flew to Houston (IAH or HOU)
+  Were operated by United, American, or Delta
+  Departed in summer (July, August, and September)
+  Arrived more than two hours late but didn’t leave late
+  Were delayed by at least an hour, but made up over 30 minutes in flight
+```{r}
+flights |>
+  filter(arr_delay >= 2)
+
+flights |>
+  filter(dest %in% c("IAH", "HOU"))
+
+flights |>
+  filter(carrier %in% c("UA", "AA", "DL"))
+
+flights |>
+  filter(month %in% c(7,8,9))
+
+flights |>
+  filter(arr_delay > 120 & dep_delay == 0)
+
+flights |>
+  filter(dep_delay >= 60 & arr_delay < 30)
+```
+2. Sort flights to find the flights with the longest departure delays. Find the flights that left earliest in the morning.
+```{r}
+flights |>
+  arrange(desc(dep_delay))
+
+flights |>
+   filter(dep_time == min(dep_time, na.rm = TRUE))
+```
+3. Sort flights to find the fastest flights. (Hint: Try including a math calculation inside of your function.)
+```{r}
+flights |>
+  arrange(desc(distance / air_time * 60))
+```
+4. Was there a flight on every day of 2013?
+```{r}
+flights_2013 <- flights |>
+  distinct(year, month, day)
+nrow(flights_2013) == 365
+```
+5. Which flights traveled the farthest distance? Which traveled the least distance?
+```{r}
+flights |>
+  filter(distance == max(distance, na.rm = TRUE))
+
+flights |>
+  filter(distance == min(distance, na.rm = TRUE))
+```
+
+```{r}
+flights |>
+  mutate(
+    gain = dep_delay - arr_delay,
+    speed = distance / air_time * 60
+  )
+
+### note: mutate() creates new columns that are derived from the existing columns.
+### By default, mutate() adds new columns on the right-hand side of your dataset, which makes it difficult to see what’s happening here. We can use the .before argument to instead add the variables to the left-hand side:
+flights |>
+  mutate(
+    gain = dep_delay - arr_delay,
+    speed = distance / air_time * 60,
+    .before = 1
+  )
+
+### note: The . indicates that .before is an argument to the function, not the name of a third new variable we are creating. You can also use .after to add after a variable, and in both .before and .after you can use the variable name instead of a position. For example, we could add the new variables after day:
+flights |>
+  mutate(
+    gain = dep_delay - arr_delay,
+    speed = distance / air_time * 60,
+    .after = day
+  )
+
+### note: Alternatively, you can control which variables are kept with the .keep argument. A particularly useful argument is "used" which specifies that we only keep the columns that were involved or created in the mutate() step. For example, the following output will contain only the variables dep_delay, arr_delay, air_time, gain, hours, and gain_per_hour.
+flights |>
+  mutate(
+    gain = dep_delay - arr_delay,
+    hours = air_time / 60,
+     gain_per_hour = gain / hours,
+    .keep = "used"
+  )
+```
+
+```{r}
+flights |>
+  select(year, month, day) # select() allows you to focus on the variables you are interested in.
+
+flights |>
+  select(year:day) # select all columns between year and day (inclusive)
+
+flights |> 
+  select(!year:day) # Select all columns except those from year to day (inclusive)
+
+flights |>
+  select(where(is.character)) # Select all columns that are characters
+
+flights |>
+  select(starts_with("arr")) # similar to "ends_with", "contains", num_range("x", 1:3): matches x1, x2 and x3
+
+flights |>
+  select(arrive_delay = arr_delay)
+
+### note: If you want to keep all the existing variables and just want to rename a few, you can use rename() instead of select():
+flights |>
+  rename(arrive_delay = arr_delay)
+```
+
+```{r}
+### note: Use relocate() to move variables around. You might want to collect related variables together or move important variables to the front. By default relocate() moves variables to the front:
+flights |>
+  relocate(dep_delay, arr_delay)
+# You can also specify where to put them using the .before and .after arguments, just like in mutate():
+flights |>
+  relocate(year:dep_time, .after = time_hour)
+flights |>
+  relocate(arr_delay, .before = dep_delay)
+```
+Exercise
+1. Compare dep_time, sched_dep_time, and dep_delay. How would you expect those three numbers to be related?
+2. Brainstorm as many ways as possible to select dep_time, dep_delay, arr_time, and arr_delay from flights.
+3. What happens if you specify the name of the same variable multiple times in a select() call?
+4. What does the any_of() function do? Why might it be helpful in conjunction with this vector?
+5. variables <- c("year", "month", "day", "dep_delay", "arr_delay")
+6. Does the result of running the following code surprise you? How do the select helpers deal with upper and lower case by default? How can you change that default?
+```{r}
+flights |>
+  mutate(
+    expected_dep_delay = dep_time - sched_dep_time,
+    expected = expected_dep_delay == dep_delay
+  ) |>
+  relocate(expected_dep_delay, expected)
+
+flights |>
+  select(arr_time, arr_time) # will just show once
+
+vars <- c("dep_time", "dep_delay", "arr_time", "arr_delay", "nonexistent")
+flights |>
+  select(any_of(vars)) # any_of() takes a character vector of column names and selects those columns if they exist. If they do not exist, it won't throw any error.
+
+flights |> select(contains("TIME")) # the match is case-insensitive by default. Most tidyselect helpers (contains(), starts_with(), ends_with(), matches()) ignore case unless you tell them not to.
+
+flights |> select(contains("TIME", ignore.case = FALSE)) # With ignore.case = FALSE: "TIME" only matches exact uppercase "TIME" (and won’t find anything in flights).
+
+flights |>
+  rename(air_time_min = air_time) |>
+  relocate(air_time_min)
+```
+
+```{r}
+# The pipe
+flights |>
+  filter(dest == "IAH") |>
+  mutate(speed = distance / air_time * 60) |>
+  select(year:day, dep_time, carrier, flight, speed) |>
+  arrange(desc(speed)) 
+```
+
+```{r}
+# Use group_by() to divide your dataset into groups meaningful for your analysis:
+flights |>
+  group_by(month) # subsequent operations will now work “by month”.
+
+flights |>
+  group_by(month) |>
+  summarize(
+    avg_delay = mean(dep_delay, na.rm = TRUE)
+  )
+
+flights |> 
+  group_by(dest) |> 
+  slice_max(arr_delay, n = 1) |>  # sometimes the max can be multiple rows. If just want to keep one, set with_ties = FALSE.
+  relocate(dest)
+
+daily <- flights |> 
+  group_by(year, month, day)
+daily
+
+daily_flights <- daily |> 
+  summarize(
+    n = n()
+  )
+
+daily_flights <- daily |> 
+  summarize(
+    n = n(), # n() returns the # of rows in the current group
+    .groups = "keep"
+  )
+
+daily |> 
+  ungroup()
+
+daily |>  
+  ungroup() |>  # remove grouping from a data frame
+  summarize(
+    avg_delay = mean(dep_delay, na.rm = TRUE),
+    flights = n()
+  )
+
+flights |> 
+  summarize(
+    delay = mean(dep_delay, na.rm = TRUE),
+    n = n(),
+    .by = month
+  ) |> 
+  arrange(month)
+```
+Exercise:
+1. Which carrier has the worst average delays? Challenge: can you disentangle the effects of bad airports vs. bad carriers? Why/why not? (Hint: think about flights |> group_by(carrier, dest) |> summarize(n()))
+
+2. Find the flights that are most delayed upon departure from each destination.
+
+3. How do delays vary over the course of the day? Illustrate your answer with a plot.
+
+4. What happens if you supply a negative n to slice_min() and friends?
+
+5. Explain what count() does in terms of the dplyr verbs you just learned. What does the sort argument to count() do?
+```{r}
+flights |> 
+  group_by(carrier) |> 
+  summarize(
+    delay = mean(dep_delay, na.rm = TRUE)
+  ) |> 
+  arrange(desc(delay))
+
+flights |> 
+  group_by(carrier, dest) |> 
+  summarize(n())
+
+flights |> 
+  group_by(dest) |> 
+  slice_max(dep_delay)
+
+flights |> 
+  group_by(month) |> 
+  slice_min(dep_delay, n = -1) # if we pass a negative number to n, it will return all rows except the row with smallest dep_delay.
+
+flights |> 
+  count(carrier) # count: count the # of rows in each group
+
+flights |> 
+  group_by(carrier) |> 
+  summarise(n = n())
+flights |> 
+  count(carrier, sort = TRUE) # arrange the result in descending order
+
+```
+
+```{r}
+library(ggplot2)
+
+flights_by_hour <- 
+  flights |> 
+  mutate(hour = dep_time %/% 100) |> 
+  group_by(hour) |> 
+  summarize(
+    avg_delay = mean(dep_delay, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(flights_by_hour, aes(x = hour, y = avg_delay)) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Average Departure Delay by Hour of Day",
+    x = "Hour of Day",
+    y = "Average Departure Delay (minutes)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+df <- tibble(
+  x = 1:5,
+  y = c("a", "b", "a", "a", "b"),
+  z = c("K", "K", "L","L", "K")
+)
+df
+df |>
+  group_by(y)
+df |>
+  arrange(y)
+df |>
+  group_by(y) |>
+  summarize(mean_x = mean(x))
+df |>
+  group_by(y, z) |>
+  summarize(mean_x = mean(x))
+df |>
+  group_by(y, z) |>
+  summarize(mean_x = mean(x), .groups = "drop")
+```
