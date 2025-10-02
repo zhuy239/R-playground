@@ -1,0 +1,189 @@
+---
+title: "GenomicRanges_practice"
+author: "Ying Zhu"
+date: "2025-09-29"
+output: html_document
+---
+### Splitting and combining GRanges objects
+```{r}
+library(GenomicRanges)
+
+gr <- GRanges(
+    seqnames = Rle(c("chr1", "chr2", "chr1", "chr3"), c(1, 3, 2, 4)),
+    ranges = IRanges(101:110, end = 111:120, names = head(letters, 10)),
+    strand = Rle(strand(c("-", "+", "*", "+", "-")), c(1, 2, 2, 3, 2)),
+    score = 1:10,
+    GC = seq(1, 0, length=10)) # the metadata is comprised of score and GC information, but almost anything can be stored in the metadata portion of a GRanges object.
+gr
+
+# The components of the genomic coordinates within a GRanges object can be extracted using the seqnames, ranges, and strand accessor functions.
+seqnames(gr)
+ranges(gr)
+strand(gr)
+
+# The genomic ranges can be extracted without corresponding metadata with granges.
+granges(gr)
+
+# Annotations for these coordinates can be extracted as a DataFrame object using the mcols accessor.
+mcols(gr)
+mcols(gr)$score
+
+# Information about the lengths of the various sequences that the ranges are aligned to can also be stored in the GRanges object. So if this is data from Homo sapiens, we can set the values as:
+seqlengths(gr) <- c(249250621, 243199373, 198022430)
+seqlengths(gr)
+
+# Methods for accessing the length and names have also been defined.
+names(gr)
+length(gr)
+
+# GRanges objects can be divided into groups using the split method. 
+sp <- split(gr, rep(1:2, each=5))
+sp
+
+# Separate GRanges instances can be concatenated by using the c and append methods.
+c(sp[1], sp[2])
+```
+### Subsetting GRanges objects
+```{r}
+gr[2:3] 
+# A second argument to the [ subset operator can be used to specify which metadata columns to extract from the GRanges object.
+gr[2:3, "score"]
+# Elements can also be assigned to the GRanges object.
+singles <- split(gr, names(gr)) # split each row of gr and save to a list
+grMod <- gr
+grMod[2] <- singles[[1]] # change the second row of grMod to the first row of gr
+head(grMod)
+# There are methods to repeat, reverse, or select specific portions of GRanges objects.
+rep(gr[2], times = 3)
+rev(gr)
+head(gr, n=2)
+tail(gr, n=2)
+window(gr, start = 2, end = 4)
+gr[IRanges(start=c(2,7), end=c(3,9))] # get 2-3 and 7-9
+
+```
+
+### Basic interval operations for GRanges objects
+```{r}
+g <- gr[1:3] # get the first 3 rows of gr
+g <- append(g, singles[[10]]) # add the 10th element in single to g
+start(g) # get the start of each interval
+end(g)
+width(g)
+range(g)
+
+flank(g, 10) # get 10 bases upstream
+flank(g, 10, start=FALSE)
+shift(g, 5) # coordinate + 5, strand not considered.
+resize(g, 30, fix="start") # set length of each interval to 30bp
+g
+reduce(g)
+gaps(g) # get gap regions
+disjoin(g) # represents a GRanges object as a collection of non-overlapping ranges
+coverage(g)
+```
+### Interval set operations for GRanges objects
+```{r}
+g2 <- head(gr, n=2)
+g
+unique(g)
+union(g, g2)
+intersect(g, g2)
+setdiff(g,g2)
+
+g3 <- g[1:2]
+ranges(g3[1]) <- IRanges(start=105, end=112)
+g3
+g2
+union(g2,g3)
+punion(g2, g3) # p stands for parallel
+pintersect(g2, g3)
+psetdiff(g2, g3)
+```
+
+### GRangesList: Groups of Genomic Ranges
+```{r}
+# Whenever genomic features consist of multiple ranges that are grouped by a parent feature, they can be represented as a GRangesList object.
+gr1 <- GRanges(
+  seqnames = "chr2",
+  ranges = IRanges(103, 106),
+  strand = "+",
+  score = 5L, GC = 0.45)
+gr2 <- GRanges(
+  seqnames = c("chr1", "chr1"),
+  ranges = IRanges(c(107, 113), width = 3),
+  strand = c("+", "-"),
+  score = 3:4, GC = c(0.3, 0.5))
+grl <- GRangesList("txA" = gr1, "txB" = gr2)
+grl
+```
+### Basic GRangesList accessors
+```{r}
+# Just as with GRanges object, the components of the genomic coordinates within a GRangesList object can be extracted using simple accessor methods. Not surprisingly, the GRangesList objects have many of the same accessors as GRanges objects. The difference is that many of these methods return a list since the input is now essentially a list of GRanges objects.
+seqnames(grl)
+ranges(grl)
+strand(grl)
+# The length and names methods will return the length or names of the list and the seqlengths method will return the set of sequence lengths.
+length(grl)
+names(grl)
+seqlengths(grl)
+elementNROWS(grl) # returns a list of integers corresponding to the result of calling NROW on each individual GRanges object
+isEmpty(grl) # tests if a GRangesList object contains anything.
+mcols(grl)$value <- c("Transcript A","Transcript B")
+mcols(grl)
+mcols(unlist(grl)) # Element-level metadata can be retrieved by unlisting the GRangesList, and extracting the metadata
+```
+
+### Combining GRangesList objects
+```{r}
+ul <- unlist(grl)
+ul
+grl1 <- GRangesList(
+    gr1 = GRanges("chr2", IRanges(3, 6)),
+    gr2 = GRanges("chr1", IRanges(c(7,13), width = 3))) # 两个区间的起点是7和13，都3bp长
+grl2 <- GRangesList(
+    gr1 = GRanges("chr2", IRanges(9, 12)),
+    gr2 = GRanges("chr1", IRanges(c(25,38), width = 3)))
+
+pc(grl1, grl2)
+grl3 <- c(grl1, grl2)
+regroup(grl3, names(grl3))
+```
+
+### Basic interval operations for GRangesList objects
+```{r}
+grl
+start(grl)
+end(grl)
+width(grl)
+sum(width(grl))
+shift(grl, 20)
+coverage(grl) # coverage() 会自动把每条染色体的长度定为：该染色体上所有区间的最大end坐标
+```
+### Subsetting GRangesList objects
+```{r}
+grl[1] # return txA
+grl[[1]] # return the first row of txA
+grl["txA"] # same as [1]
+grl$txB # return txB
+grl[1, "score"]
+grl["txB", "GC"]
+rep(grl[[1]], times = 3)
+rev(grl)
+head(grl, n=1) # 从 grl 里取出第一个元素（也就是第一个 GRanges 对象）
+tail(grl, n=1)
+window(grl, start=1, end=1)
+grl[IRanges(start=2, end=2)]
+
+```
+
+### Interval overlaps involving GRanges and GRangesList objects
+```{r}
+gr
+grl
+findOverlaps(gr, grl) # gr的第m个元素和grl的第n个元素有重叠
+countOverlaps(gr, grl)
+subsetByOverlaps(gr,grl) #  extracts the elements in the query (gr) that overlap at least one element in the subject (grl).
+findOverlaps(gr, grl, select="first") # get the index of the first overlapping element in the subject for each element in the query.
+findOverlaps(grl, gr, select="first") 
+```
